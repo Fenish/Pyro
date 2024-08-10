@@ -1,5 +1,4 @@
 let socket;
-let pingInterval;
 
 function connect() {
   if (socket && socket.connected) {
@@ -29,10 +28,6 @@ function emit(event, data) {
   if (socket && socket.connected) {
     socket.emit(event, data);
   }
-}
-
-function ping() {
-  emit('ping');
 }
 
 function socketEvents() {
