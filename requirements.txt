@@ -1,0 +1,6 @@
+Flask
+Flask_Cors
+Flask_SocketIO
+Requests
+Flask_Compress
+Transcrypt
