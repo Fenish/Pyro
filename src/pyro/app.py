@@ -10,9 +10,8 @@ from flask_compress import Compress
 # ----------------- PYRO IMPORTS --------------------- #
 
 from .core.route_handler import RouteHandler
-from .core.socket import SocketEvents
+from .core.devMode.socket import SocketEvents
 
-route_handler = None
 app = Flask(__name__)
 Compress(app)
 CORS(app)
@@ -22,13 +21,14 @@ CORS(app)
 
 
 def start_socket_server():
+    global socket
     if Config.development == False:
         return
 
     app.socket = SocketIO(
         app, cors_allowed_origins="*", transports=["pooling", "websocket"]
     )
-    SocketEvents(app.socket, app)
+    SocketEvents(app)
 
 
 def start_server():
@@ -38,7 +38,6 @@ def start_server():
 
 
 def start(routes=[], development=False):
-    global route_handler
     Config.development = development
     Config.routes = routes
 

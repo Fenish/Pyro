@@ -19,6 +19,9 @@ class TemplateTokenizer:
     def __str__(self) -> str:
         return json.dumps(self.tokens)
 
+    def __iter__(self):
+        return iter(self.tokens)
+
     def extract_template_content(self):
         template_content = re.search(
             r"<template>(.*?)</template>", self.raw_code, re.DOTALL
@@ -101,3 +104,44 @@ class TemplateTokenizer:
                     reactive_var_match.group(1) if reactive_var_match else text_content
                 ),
             }
+
+    def generate_body(self):
+
+        generated_ids = []
+
+        def build_body(tokens):
+            body_parts = []
+            for token in tokens:
+                if token["id"] in generated_ids:
+                    continue
+
+                generated_ids.append(token["id"])
+                tag_open = f"<{token['tag']} id=\"{token['id']}\""
+                for attr in token["attributes"]:
+                    body_parts.append(f" {attr['name']}=\"{attr['value']}\"")
+                for custom_attr in token["custom_attributes"]:
+                    body_parts.append(
+                        f" {custom_attr['name']}=\"{custom_attr['value']}\""
+                    )
+
+                tag_open += ">"
+
+                body_parts.append(tag_open)
+
+                # Generate children body inside the current token
+                if token["children"]:
+                    child_tokens = [t for t in tokens if t["id"] in token["children"]]
+                    body_parts.append(build_body(child_tokens))
+
+                if token["value"]:
+                    value_content = token["value"]["value"]
+                    if token["value"]["type"] == "reactive":
+                        body_parts.append(f"{{{{ {value_content} }}}}")
+                    else:
+                        body_parts.append(value_content)
+
+                body_parts.append(f"</{token['tag']}>")
+
+            return "".join(body_parts)
+
+        return build_body(self.tokens)

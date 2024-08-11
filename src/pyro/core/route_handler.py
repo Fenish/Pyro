@@ -1,16 +1,21 @@
 import os
+from ..config import Config
+
 from .html import Html
 from .parser import PyroParser
-from flask import make_response, send_from_directory, redirect, request
 
-from ..config import Config
+from .devMode.hmr import PyroWatcher
+
+from flask import make_response, send_from_directory, redirect, request
 
 
 class RouteHandler:
     def __init__(self, app):
         self.app = app
         self.routes = Config.routes
+
         self.parsers = {}
+        self.watchers = {}
 
         self.register()
 
@@ -30,6 +35,13 @@ class RouteHandler:
 
         if self.parsers.get(path) is None:
             self.parsers[path] = parser
+
+        if Config.development:
+            if self.watchers.get(path) is None:
+                self.watchers[path] = PyroWatcher(parser, self.app)
+                self.watchers[path].start()
+            else:
+                self.watchers[path].parser = parser
 
         html = Html(parser.html_body)
         return html.content
