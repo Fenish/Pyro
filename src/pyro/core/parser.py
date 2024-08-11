@@ -3,8 +3,6 @@ import os
 from .tokenizers.template import TemplateTokenizer
 from .tokenizers.python import PythonTokenizer
 
-from .parsers.javascript import JavascriptParser
-
 
 class PyroParser:
     def __init__(self, module_path):

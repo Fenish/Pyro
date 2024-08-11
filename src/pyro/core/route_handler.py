@@ -31,19 +31,17 @@ class RouteHandler:
             return None
 
         module = route["module"]
-        parser = PyroParser(module)
-
         if self.parsers.get(path) is None:
-            self.parsers[path] = parser
+            self.parsers[path] = PyroParser(module)
 
         if Config.development:
             if self.watchers.get(path) is None:
-                self.watchers[path] = PyroWatcher(parser, self.app)
+                self.watchers[path] = PyroWatcher(self.parsers[path], self.app)
                 self.watchers[path].start()
             else:
-                self.watchers[path].parser = parser
+                self.watchers[path].parser = self.parsers[path]
 
-        html = Html(parser.html_body)
+        html = Html(self.parsers[path].html_body)
         return html.content
 
     def register(self):
