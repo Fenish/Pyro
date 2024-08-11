@@ -7,6 +7,12 @@ from watchdog.events import FileSystemEventHandler
 
 from ..tokenizers.template import TemplateTokenizer
 
+# HMR: Hot Module Replacement
+# What is HMR?
+# HMR is a feature that allows you to update your code without restarting the server or refreshing the page.
+# It's a way to make your code more dynamic and interactive.
+# The reason that i implement hmr is to challenge myself
+
 
 def replace_id(old_tokens, new_tokens):
     old_copied_tokens = [token.copy() for token in old_tokens]
@@ -21,15 +27,13 @@ def replace_id(old_tokens, new_tokens):
         new_token_id = new_token["id"]
 
         if is_uuid4(new_token_id) and is_uuid4(old_token_id):
-            new_token["id"] = old_token_id  # Assign old_token_id to new_token["id"]
+            new_token["id"] = old_token_id
 
-        childrens = new_token.get("children", [])  # Use get to avoid KeyError
+        childrens = new_token.get("children", [])
         if childrens:
             for i, child in enumerate(childrens):
                 if is_uuid4(child):
-                    childrens[i] = id_map.get(
-                        child, child
-                    )  # Replace child if it's a UUID
+                    childrens[i] = id_map.get(child, child)
 
     return new_copied_tokens
 
@@ -44,79 +48,55 @@ def is_uuid4(id_string):
 
 
 def find_differences(old_tokens, new_tokens):
-    def compare_tokens(old_token, new_token):
-        differences = {}
-
-        if old_token["tag"] != new_token["tag"]:
-            differences["tag"] = new_token["tag"]
-
-        if old_token["id"] != new_token["id"]:
-            differences["id"] = new_token["id"]
-
-        if old_token["class"] != new_token["class"]:
-            differences["class"] = new_token["class"]
-
-        if old_token["attributes"] != new_token["attributes"]:
-            differences["attributes"] = new_token["attributes"]
-
-        if old_token["custom_attributes"] != new_token["custom_attributes"]:
-            differences["custom_attributes"] = new_token["custom_attributes"]
-
-        if old_token["value"] != new_token["value"]:
-            differences["value"] = new_token["value"]
-
-        if old_token["isVisible"] != new_token["isVisible"]:
-            differences["isVisible"] = new_token["isVisible"]
-
-        # Handle children differences
-        old_children_set = set(old_token["children"])
-        new_children_set = set(new_token["children"])
-
-        added_children = new_children_set - old_children_set
-        removed_children = old_children_set - new_children_set
-
-        if added_children or removed_children:
-            differences["children"] = {
-                "added": list(added_children),
-                "removed": list(removed_children),
-            }
-
-            # Add full tag details for added elements
-            if added_children:
-                differences["elements"] = [
-                    next(child for child in new_tokens if child["id"] == added_child_id)
-                    for added_child_id in added_children
-                ]
-
-        return differences if differences else None
-
-    old_copied_tokens = [token.copy() for token in old_tokens]
-    new_copied_tokens = [token.copy() for token in new_tokens]
-
-    id_map = {
-        new["id"]: old["id"] for old, new in zip(old_copied_tokens, new_copied_tokens)
-    }
-
-    for new_token in new_copied_tokens:
-        old_token_id = id_map.get(new_token["id"])
-        new_token_id = new_token["id"]
-
-        if is_uuid4(new_token_id) and is_uuid4(old_token_id):
-            new_token_id = old_token_id
-
-        new_token["id"] = new_token_id
-
-        new_token["children"] = [
-            id_map.get(child_id, child_id) for child_id in new_token["children"]
-        ]
-
     changes = []
-    for old_token, new_token in zip(old_copied_tokens, new_copied_tokens):
-        token_diff = compare_tokens(old_token, new_token)
-        if token_diff:
-            changes.append({"id": old_token["id"], "changes": token_diff})
+    old_token_dict = {token["id"]: token for token in old_tokens}
+    new_token_dict = {token["id"]: token for token in new_tokens}
+    keys_to_check = [
+        "tag",
+        "id",
+        "class",
+        "parent",
+        "attributes",
+        "custom_attributes",
+        "value",
+        "isVisible",
+        "location",
+    ]
 
-    return changes if changes else None
+    for old_id in old_token_dict:
+        if old_id not in new_token_dict:
+            changes.append({"type": "removed", "id": old_id, "changes": {}})
+
+    for new_id in new_token_dict:
+        if new_id not in old_token_dict:
+            new_token = new_token_dict[new_id]
+            changes.append(
+                {
+                    "type": "added",
+                    "id": new_id,
+                    "changes": {
+                        key: {"value": new_token.get(key)}
+                        for key in keys_to_check
+                        if key in new_token
+                    },
+                }
+            )
+
+    for token_id in set(old_token_dict.keys()) & set(new_token_dict.keys()):
+        old_token = old_token_dict[token_id]
+        new_token = new_token_dict[token_id]
+
+        token_changes = {}
+        for key in keys_to_check:
+            if old_token.get(key) != new_token.get(key):
+                token_changes[key] = {"value": new_token.get(key)}
+
+        if token_changes:
+            changes.append(
+                {"type": "modified", "id": token_id, "changes": token_changes}
+            )
+
+    return changes
 
 
 class ChangeHandler(FileSystemEventHandler):
@@ -132,21 +112,15 @@ class ChangeHandler(FileSystemEventHandler):
             return
 
         self.watcher.last_triggered = current_time
-        print("File changed:", event.src_path)
 
         old_tokens = self.watcher.old_tokens
-        decoy_html_tokens = TemplateTokenizer(self.get_file_content()).tokens
+        new_tokenizer = TemplateTokenizer(self.get_file_content())
+        new_tokens = new_tokenizer.tokens
 
-        diff = find_differences(old_tokens, decoy_html_tokens)
+        diff = find_differences(old_tokens, new_tokens)
         if diff:
-            changed_ids = replace_id(old_tokens, decoy_html_tokens)
-            # print("old:", old_tokens)
-            # print("new:", decoy_html_tokens)
-
-            # print("changed_ids:", changed_ids)
-            # print("diff:", diff)
-
-            self.watcher.old_tokens = changed_ids
+            self.watcher.old_tokens = new_tokens
+            self.watcher.parser.html_body = new_tokenizer.generate_body()
             self.watcher.socket.emit("hmr:patch-document", diff)
 
     def get_file_content(self):
